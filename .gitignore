@@ -1,33 +1,45 @@
+# ============================================================
+# Microchip Studio / Visual Studio
+# ============================================================
+
+.vs/
+
+# User-specific IDE state
+*.user
+*.suo
+*.userprefs
+
+# ============================================================
 # Build output
+# ============================================================
+
 Debug/
 Release/
-DebugGcc/
-ReleaseGcc/
 
-# Microchip Studio / Visual Studio user state
-*.suo
-*.user
-*.userprefs
-*.sdf
-*.opensdf
-*.VC.db
-*.VC.VC.opendb
-
-# Temporary/editor files
-*.tmp
-*.temp
-*.bak
-*.swp
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Generated firmware artifacts
+# Common generated compiler/linker artifacts
 *.elf
 *.hex
 *.bin
 *.eep
 *.map
 *.lss
+
+# Generated firmware package
+*.uf2
+
+# ============================================================
+# Temporary / backup files
+# ============================================================
+
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# ============================================================
+# Windows
+# ============================================================
+
+Thumbs.db
+Desktop.ini
