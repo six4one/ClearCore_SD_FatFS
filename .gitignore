@@ -1,0 +1,33 @@
+# Build output
+Debug/
+Release/
+DebugGcc/
+ReleaseGcc/
+
+# Microchip Studio / Visual Studio user state
+*.suo
+*.user
+*.userprefs
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+
+# Temporary/editor files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated firmware artifacts
+*.elf
+*.hex
+*.bin
+*.eep
+*.map
+*.lss
