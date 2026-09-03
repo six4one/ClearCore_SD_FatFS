@@ -66,8 +66,8 @@ int main()
 	char readBuffer[128];
 
 	Print("\r\n");
-	Print("SD ROOT DIRECTORY DIAGNOSTIC\r\n");
-	Print("============================\r\n");
+	Print("SD LOCKOUT STATE READ TEST\r\n");
+	Print("===========================\r\n");
 
 	// ---------------------------------------------------------
 	// Initialize SD card
@@ -102,59 +102,7 @@ int main()
 	}
 
 	// ---------------------------------------------------------
-	// Enumerate root directory
-	// ---------------------------------------------------------
-
-	Print("\r\n===== ROOT DIRECTORY =====\r\n");
-
-	DIR directory;
-	FILINFO info;
-
-	result = f_opendir(&directory, "");
-
-	Print("f_opendir result: ");
-	PrintNumber(result);
-	Print("\r\n");
-
-	if (result == FR_OK) {
-
-		while (true) {
-
-			result = f_readdir(&directory, &info);
-
-			if (result != FR_OK) {
-				Print("f_readdir result: ");
-				PrintNumber(result);
-				Print("\r\n");
-				break;
-			}
-
-			// Empty filename means end of directory.
-			if (info.fname[0] == '\0') {
-				break;
-			}
-
-			if (info.fattrib & AM_DIR) {
-				Print("[DIR ] ");
-			}
-			else {
-				Print("[FILE] ");
-			}
-
-			Print(info.fname);
-			Print("\r\n");
-		}
-
-		f_closedir(&directory);
-	}
-	else {
-		Print("ROOT DIRECTORY OPEN FAILED\r\n");
-	}
-
-	Print("===== END DIRECTORY =====\r\n");
-
-	// ---------------------------------------------------------
-	// Try the requested filename exactly as supplied
+	// Open lockout state file for reading
 	// ---------------------------------------------------------
 
 	Print("\r\nBEFORE f_open(lockout.json)\r\n");
@@ -171,43 +119,84 @@ int main()
 	PrintNumber(result);
 	Print("\r\n");
 
-	if (result == FR_OK) {
-		Print("lockout.json OPENED SUCCESSFULLY\r\n");
-		f_close(&file);
-	}
-	else {
-		Print("lockout.json OPEN FAILED\r\n");
+	if (result != FR_OK) {
+		StopWithAliveMessage("OPEN FAILED\r\n");
 	}
 
 	// ---------------------------------------------------------
-	// Diagnostic comparison using uppercase filename
+	// Read lockout state file
 	// ---------------------------------------------------------
 
-	Print("\r\nBEFORE f_open(LOCKOUT.JSON)\r\n");
+	for (UINT i = 0; i < sizeof(readBuffer); ++i) {
+		readBuffer[i] = '\0';
+	}
 
-	result = f_open(
+	Print("\r\nBEFORE f_read\r\n");
+
+	result = f_read(
 	&file,
-	"LOCKOUT.JSON",
-	FA_READ
+	readBuffer,
+	sizeof(readBuffer) - 1,
+	&bytesRead
 	);
 
-	Print("AFTER f_open\r\n");
+	Print("AFTER f_read\r\n");
 
-	Print("f_open result: ");
+	Print("f_read result: ");
 	PrintNumber(result);
 	Print("\r\n");
 
-	if (result == FR_OK) {
-		Print("LOCKOUT.JSON OPENED SUCCESSFULLY\r\n");
+	Print("bytes read: ");
+	PrintNumber(bytesRead);
+	Print("\r\n");
+
+	if (result != FR_OK) {
 		f_close(&file);
-	}
-	else {
-		Print("LOCKOUT.JSON OPEN FAILED\r\n");
+		StopWithAliveMessage("READ FAILED\r\n");
 	}
 
 	// ---------------------------------------------------------
-	// Stay alive
+	// Close file
 	// ---------------------------------------------------------
+
+	Print("\r\nBEFORE f_close\r\n");
+
+	result = f_close(&file);
+
+	Print("AFTER f_close\r\n");
+
+	Print("f_close result: ");
+	PrintNumber(result);
+	Print("\r\n");
+
+	if (result != FR_OK) {
+		StopWithAliveMessage("CLOSE FAILED\r\n");
+	}
+
+	// ---------------------------------------------------------
+	// Display file contents
+	// ---------------------------------------------------------
+
+	Print("\r\n===== lockout.json =====\r\n");
+
+	for (UINT i = 0; i < bytesRead; ++i) {
+		ConnectorUsb.SendChar(
+		static_cast<uint8_t>(readBuffer[i])
+		);
+	}
+
+	Print("===== END FILE =====\r\n");
+
+	// ---------------------------------------------------------
+	// Test result
+	// ---------------------------------------------------------
+
+	if (bytesRead > 0) {
+		Print("\r\n*** LOCKOUT FILE READ PASS ***\r\n");
+	}
+	else {
+		Print("\r\n*** LOCKOUT FILE READ FAIL: EMPTY FILE ***\r\n");
+	}
 
 	while (true) {
 		Delay_ms(1000);

@@ -264,6 +264,9 @@
     <Compile Include="ffconf.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="ffunicode.c">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="main.cpp">
       <SubType>compile</SubType>
     </Compile>
