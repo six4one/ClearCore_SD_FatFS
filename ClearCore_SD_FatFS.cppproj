@@ -273,6 +273,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Device_Startup\" />
+    <Folder Include="docs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\libClearCore\ClearCore.cppproj">
