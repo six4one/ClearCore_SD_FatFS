@@ -1,7 +1,6 @@
 #include "ClearCore.h"
 #include "ff.h"
 #include "diskio.h"
-#include "ArduinoJson-v6.21.6.h"
 
 using namespace ClearCore;
 
@@ -63,12 +62,8 @@ int main()
 	char readBuffer[128];
 
 	Print("\r\n");
-	Print("SD LOCKOUT JSON PARSE DIAGNOSTIC\r\n");
-	Print("=================================\r\n");
-
-	// ------------------------------------------------------------
-	// SD initialization
-	// ------------------------------------------------------------
+	Print("SD LOCKOUT FILE READ DIAGNOSTIC\r\n");
+	Print("================================\r\n");
 
 	DSTATUS status = disk_initialize(0);
 
@@ -79,10 +74,6 @@ int main()
 	if (status & STA_NOINIT) {
 		StopWithAliveMessage("SD INIT FAILED\r\n");
 	}
-
-	// ------------------------------------------------------------
-	// Mount filesystem
-	// ------------------------------------------------------------
 
 	Print("\r\nBEFORE f_mount\r\n");
 
@@ -98,9 +89,50 @@ int main()
 		StopWithAliveMessage("MOUNT FAILED\r\n");
 	}
 
-	// ------------------------------------------------------------
-	// Open Lockout state file
-	// ------------------------------------------------------------
+	Print("\r\n===== ROOT DIRECTORY =====\r\n");
+
+	DIR directory;
+	FILINFO info;
+
+	result = f_opendir(&directory, "");
+
+	Print("f_opendir result: ");
+	PrintNumber(result);
+	Print("\r\n");
+
+	if (result == FR_OK) {
+		while (true) {
+			result = f_readdir(&directory, &info);
+
+			if (result != FR_OK) {
+				Print("f_readdir result: ");
+				PrintNumber(result);
+				Print("\r\n");
+				break;
+			}
+
+			if (info.fname[0] == '\0') {
+				break;
+			}
+
+			if (info.fattrib & AM_DIR) {
+				Print("[DIR ] ");
+			}
+			else {
+				Print("[FILE] ");
+			}
+
+			Print(info.fname);
+			Print("\r\n");
+		}
+
+		f_closedir(&directory);
+	}
+	else {
+		Print("ROOT DIRECTORY OPEN FAILED\r\n");
+	}
+
+	Print("===== END DIRECTORY =====\r\n");
 
 	Print("\r\nBEFORE f_open(lockout.json)\r\n");
 
@@ -117,14 +149,11 @@ int main()
 	Print("\r\n");
 
 	if (result != FR_OK) {
-		StopWithAliveMessage("LOCKOUT FILE OPEN FAILED\r\n");
+		Print("lockout.json OPEN FAILED\r\n");
+		StopWithAliveMessage("READ TEST ABORTED\r\n");
 	}
 
 	Print("lockout.json OPENED SUCCESSFULLY\r\n");
-
-	// ------------------------------------------------------------
-	// Read file
-	// ------------------------------------------------------------
 
 	Print("\r\n===== FILE CONTENT =====\r\n");
 
@@ -163,56 +192,7 @@ int main()
 
 	f_close(&file);
 
-	Print("\r\nFILE READ SUCCESSFUL\r\n");
-
-	// ------------------------------------------------------------
-	// Parse JSON
-	// ------------------------------------------------------------
-
-	Print("\r\n===== JSON PARSE =====\r\n");
-
-	StaticJsonDocument<64> document;
-
-	DeserializationError jsonError =
-	deserializeJson(document, readBuffer);
-
-	if (jsonError) {
-		Print("JSON PARSE FAILED\r\n");
-		Print("Error: ");
-		Print(jsonError.c_str());
-		Print("\r\n");
-
-		StopWithAliveMessage("JSON TEST FAILED\r\n");
-	}
-
-	Print("JSON PARSE SUCCESSFUL\r\n");
-
-	// ------------------------------------------------------------
-	// Validate Lockout member
-	// ------------------------------------------------------------
-
-	if (!document.containsKey("lockout")) {
-		StopWithAliveMessage("LOCKOUT KEY MISSING\r\n");
-	}
-
-	if (!document["lockout"].is<bool>()) {
-		StopWithAliveMessage("LOCKOUT VALUE IS NOT BOOLEAN\r\n");
-	}
-
-	bool lockout = document["lockout"].as<bool>();
-
-	Print("lockout value: ");
-
-	if (lockout) {
-		Print("true\r\n");
-	}
-	else {
-		Print("false\r\n");
-	}
-
-	Print("===== END JSON PARSE =====\r\n");
-
-	Print("\r\nLOCKOUT JSON READ AND PARSE SUCCESSFUL\r\n");
+	Print("\r\nLOCKOUT FILE READ SUCCESSFUL\r\n");
 
 	while (true) {
 		Delay_ms(1000);

@@ -243,6 +243,9 @@
     <PostBuildEvent>"$(SolutionDir)\..\Tools\uf2-builder\Release\uf2-builder.exe" "$(OutputDirectory)\$(OutputFileName).bin" "$(OutputDirectory)\$(OutputFileName).uf2"</PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ArduinoJson-v6.21.6.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="Device_Startup\flash_with_bootloader.ld">
       <SubType>compile</SubType>
     </Compile>
