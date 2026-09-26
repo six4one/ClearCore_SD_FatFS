@@ -273,6 +273,12 @@
     <Compile Include="main.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="SDFile.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="SDFile.h">
+      <SubType>compile</SubType>
+    </Compile>
     <None Include="Device_Startup\flash_without_bootloader.ld">
       <SubType>compile</SubType>
     </None>
