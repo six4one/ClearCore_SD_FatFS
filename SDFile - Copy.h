@@ -33,12 +33,4 @@ FRESULT SD_Exists(
     bool *exists
 );
 
-FRESULT SD_Read(
-    const char *path,
-    void *buffer,
-    UINT bufferSize,
-    UINT *bytesRead,
-    bool *bufferTooSmall
-);
-
 #endif /* SDFILE_H_ */

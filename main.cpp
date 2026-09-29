@@ -1,3 +1,29 @@
+/*
+ * main.cpp
+ *
+ * ClearCore SD FILE PRIMITIVE TEST HARNESS
+ *
+ * Purpose:
+ *   Hardware test harness for the ClearCore_SD_FatFS framework.
+ *   Exercises SD card detection, filesystem mounting, file primitives,
+ *   negative API cases, and the SD_Read() primitive.
+ *
+ * Tests:
+ *   TEST A - Normal file operations
+ *   TEST B - Safe negative API tests
+ *   TEST C - SD card detection
+ *   TEST D - SD_Read() tests
+ *
+ * Author: Fausto Zecca
+ *
+ * This file is part of the ClearCore_SD_FatFS test project.
+ */
+
+/*
+ * Microchip Studio generated-file style header intentionally retained
+ * above as project documentation.
+ */
+
 #include "ClearCore.h"
 #include "ff.h"
 #include "diskio.h"
@@ -12,6 +38,7 @@ namespace {
 	constexpr const char *DELETE_TEST_FILE="delete_test.txt";
 	constexpr const char *CREATE_TEST_FILE="create_test.txt";
 	constexpr const char *EMPTY_TEST_FILE="empty_test.txt";
+	constexpr const char *READ_TEST_FILE="read_test.txt";
 
 	void Print(const char *s) {
 		while (*s) ConnectorUsb.SendChar(static_cast<uint8_t>(*s++));
@@ -106,7 +133,7 @@ int main() {
 	// ------------------------------------------------------------
 	Print("\r\nTEST A - NORMAL FILE OPERATIONS\r\n---------------------------------\r\n");
 
-	const char *files[]={APPEND_TEST_FILE,REWRITE_TEST_FILE,DELETE_TEST_FILE,CREATE_TEST_FILE,EMPTY_TEST_FILE};
+	const char *files[]={APPEND_TEST_FILE,REWRITE_TEST_FILE,DELETE_TEST_FILE,CREATE_TEST_FILE,EMPTY_TEST_FILE,READ_TEST_FILE};
 	for(unsigned int i=0;i<sizeof(files)/sizeof(files[0]);++i){
 		bool e=false;r=SD_Exists(files[i],&e);
 		if(r!=FR_OK)Stop("CLEANUP CHECK FAILED\r\n");
@@ -174,6 +201,170 @@ int main() {
 
 	if(!pass)Stop("TEST B FAILED\r\n");
 	Print("TEST B RESULT: PASS\r\n");
+
+
+	// ------------------------------------------------------------
+	// D: SD_Read() primitive tests
+	// ------------------------------------------------------------
+	Print("\r\nTEST D - SD_Read() TESTS\r\n--------------------------\r\n");
+
+	bool readPass=true;
+	const char *readContent="SD_Read TEST CONTENT\r\nSECOND LINE\r\n";
+	const UINT readLength=(UINT)strlen(readContent);
+
+	// D1/D2: normal read and returned byte count.
+	r=SD_Rewrite(READ_TEST_FILE,readContent,readLength);
+	PrintResult("D1 create read-test file",r);
+	if(r!=FR_OK) readPass=false;
+
+	char readBuffer[128]={0};
+	UINT bytesRead=0;
+	bool bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read(READ_TEST_FILE,readBuffer,sizeof(readBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D2 SD_Read normal file",r);
+		if(r!=FR_OK || bufferTooSmall || bytesRead!=readLength ||
+		   memcmp(readBuffer,readContent,readLength)!=0) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  Contents:\r\n  --------------------\r\n");
+			Print(readBuffer);
+			Print("  --------------------\r\n");
+			Print("  Bytes read: ");PrintNumber(bytesRead);Print("\r\n");
+			Print("  VERIFY: PASS\r\n");
+		}
+	}
+
+	// D3: exact-size destination buffer.
+	char exactBuffer[64]={0};
+	bytesRead=0;
+	bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read(READ_TEST_FILE,exactBuffer,readLength,&bytesRead,&bufferTooSmall);
+		PrintResult("D3 SD_Read exact-size buffer",r);
+		if(r!=FR_OK || bufferTooSmall || bytesRead!=readLength ||
+		   memcmp(exactBuffer,readContent,readLength)!=0) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS - exact-size buffer accepted\r\n");
+		}
+	}
+
+	// D4: destination buffer too small.
+	char smallBuffer[8]={0};
+	bytesRead=0;
+	bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read(READ_TEST_FILE,smallBuffer,sizeof(smallBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D4 SD_Read undersized buffer",r);
+		if(r!=FR_INVALID_PARAMETER || !bufferTooSmall || bytesRead!=0) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS - buffer-too-small detected\r\n");
+		}
+	}
+
+	// D5: empty file.
+	bytesRead=0;
+	bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read(EMPTY_TEST_FILE,readBuffer,sizeof(readBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D5 SD_Read empty file",r);
+		if(r!=FR_OK || bufferTooSmall || bytesRead!=0) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS - zero bytes returned\r\n");
+		}
+	}
+
+	// D6: nonexistent file.
+	bytesRead=0;
+	bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read("this_file_should_not_exist.txt",readBuffer,sizeof(readBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D6 SD_Read nonexistent file",r);
+		if(r!=FR_NO_FILE || bufferTooSmall || bytesRead!=0) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS - FR_NO_FILE received\r\n");
+		}
+	}
+
+	// D7: invalid arguments.
+	bytesRead=0;
+	bufferTooSmall=false;
+
+	if(readPass) {
+		r=SD_Read(0,readBuffer,sizeof(readBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D7 SD_Read(NULL path)",r);
+		if(r!=FR_INVALID_PARAMETER) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS\r\n");
+		}
+
+		r=SD_Read(READ_TEST_FILE,0,sizeof(readBuffer),&bytesRead,&bufferTooSmall);
+		PrintResult("D7 SD_Read(NULL buffer)",r);
+		if(r!=FR_INVALID_PARAMETER) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS\r\n");
+		}
+
+		r=SD_Read(READ_TEST_FILE,readBuffer,sizeof(readBuffer),0,&bufferTooSmall);
+		PrintResult("D7 SD_Read(NULL bytesRead)",r);
+		if(r!=FR_INVALID_PARAMETER) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS\r\n");
+		}
+
+		r=SD_Read(READ_TEST_FILE,readBuffer,sizeof(readBuffer),&bytesRead,0);
+		PrintResult("D7 SD_Read(NULL bufferTooSmall)",r);
+		if(r!=FR_INVALID_PARAMETER) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			Print("  VERIFY: PASS\r\n");
+		}
+	}
+
+	// D8: explicitly exercise the read/display use case.
+	bytesRead=0;
+	bufferTooSmall=false;
+	memset(readBuffer,0,sizeof(readBuffer));
+
+	if(readPass) {
+		r=SD_Read(READ_TEST_FILE,readBuffer,sizeof(readBuffer)-1,&bytesRead,&bufferTooSmall);
+		PrintResult("D8 SD_Read and display",r);
+		if(r!=FR_OK || bufferTooSmall || bytesRead!=readLength) {
+			Print("  VERIFY: FAIL\r\n");
+			readPass=false;
+		} else {
+			readBuffer[bytesRead]='\0';
+			Print("  SD_Read contents:\r\n");
+			Print("  --------------------\r\n");
+			Print(readBuffer);
+			Print("  --------------------\r\n");
+			Print("  VERIFY: PASS - file read through SD_Read()\r\n");
+		}
+	}
+
+	if(!readPass) Stop("TEST D FAILED\r\n");
+	Print("TEST D RESULT: PASS\r\n");
 
 	Print("\r\n================================================\r\n");
 	Print(" ALL SD FILE PRIMITIVE TESTS PASSED\r\n");
