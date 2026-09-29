@@ -1,4 +1,13 @@
+# SD File Primitive Test — 2026-09-29
 
+Hardware verification performed after merging the `SD_Read()` implementation
+into `main` and removing obsolete SDFile copies.
+
+Result: PASS
+
+## Test Output
+
+```text
 ================================================
  ClearCore SD FILE PRIMITIVE TEST HARNESS
 ================================================
@@ -15,6 +24,8 @@ f_mount: SUCCESS
 
 TEST A - NORMAL FILE OPERATIONS
 ---------------------------------
+  cleanup SD_Delete: SUCCESS
+  cleanup SD_Delete: SUCCESS
   cleanup SD_Delete: SUCCESS
   cleanup SD_Delete: SUCCESS
   cleanup SD_Delete: SUCCESS
@@ -80,6 +91,42 @@ SD_Exists(nonexistent): SUCCESS
 SD_Delete(nonexistent): FAILED (FRESULT=4)
   VERIFY: PASS - FR_NO_FILE received
 TEST B RESULT: PASS
+
+TEST D - SD_Read() TESTS
+--------------------------
+D1 create read-test file: SUCCESS
+D2 SD_Read normal file: SUCCESS
+  Contents:
+  --------------------
+SD_Read TEST CONTENT
+SECOND LINE
+  --------------------
+  Bytes read: 35
+  VERIFY: PASS
+D3 SD_Read exact-size buffer: SUCCESS
+  VERIFY: PASS - exact-size buffer accepted
+D4 SD_Read undersized buffer: FAILED (FRESULT=19)
+  VERIFY: PASS - buffer-too-small detected
+D5 SD_Read empty file: SUCCESS
+  VERIFY: PASS - zero bytes returned
+D6 SD_Read nonexistent file: FAILED (FRESULT=4)
+  VERIFY: PASS - FR_NO_FILE received
+D7 SD_Read(NULL path): FAILED (FRESULT=19)
+  VERIFY: PASS
+D7 SD_Read(NULL buffer): FAILED (FRESULT=19)
+  VERIFY: PASS
+D7 SD_Read(NULL bytesRead): FAILED (FRESULT=19)
+  VERIFY: PASS
+D7 SD_Read(NULL bufferTooSmall): FAILED (FRESULT=19)
+  VERIFY: PASS
+D8 SD_Read and display: SUCCESS
+  SD_Read contents:
+  --------------------
+SD_Read TEST CONTENT
+SECOND LINE
+  --------------------
+  VERIFY: PASS - file read through SD_Read()
+TEST D RESULT: PASS
 
 ================================================
  ALL SD FILE PRIMITIVE TESTS PASSED
