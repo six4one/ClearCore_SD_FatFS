@@ -1,13 +1,4 @@
-# SD File Primitive Test — 2026-09-29
 
-Hardware verification performed after merging the `SD_Read()` implementation
-into `main` and removing obsolete SDFile copies.
-
-Result: PASS
-
-## Test Output
-
-```text
 ================================================
  ClearCore SD FILE PRIMITIVE TEST HARNESS
 ================================================
@@ -24,11 +15,6 @@ f_mount: SUCCESS
 
 TEST A - NORMAL FILE OPERATIONS
 ---------------------------------
-  cleanup SD_Delete: SUCCESS
-  cleanup SD_Delete: SUCCESS
-  cleanup SD_Delete: SUCCESS
-  cleanup SD_Delete: SUCCESS
-  cleanup SD_Delete: SUCCESS
 Test environment ready.
 Append record #1: SUCCESS
 Append record #2: SUCCESS
@@ -127,6 +113,58 @@ SECOND LINE
   --------------------
   VERIFY: PASS - file read through SD_Read()
 TEST D RESULT: PASS
+
+TEST E - SD_ReadLastLine() TESTS
+----------------------------------
+E1 LF with trailing newline
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E2 CRLF with trailing newline
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E3 no final terminator
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E4 single-line file
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E5 trailing blank lines
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E6 only line terminators
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E7 empty file
+  SD_Rewrite setup: SUCCESS
+  SD_ReadLastLine: SUCCESS
+  VERIFY: PASS
+E8 create oversized line: SUCCESS
+E8 read oversized line: FAILED (FRESULT=19)
+  VERIFY: PASS - no truncated line accepted
+E9 initialize large file: SUCCESS
+E9 append 8192-byte line: SUCCESS
+E9 read oversized large-file line: FAILED (FRESULT=19)
+  VERIFY: PASS - large line rejected with bounded buffer
+E9 append final tail record: SUCCESS
+E9 read large-file final record: SUCCESS
+  VERIFY: PASS - tail read from large file
+E10 read missing file: FAILED (FRESULT=4)
+  VERIFY: PASS - FR_NO_FILE propagated
+E11 NULL path: FAILED (FRESULT=19)
+E11 NULL buffer with nonzero size: FAILED (FRESULT=19)
+E11 NULL bytesRead: FAILED (FRESULT=19)
+E11 NULL bufferTooSmall: FAILED (FRESULT=19)
+  VERIFY: PASS
+E12 setup read-only check: SUCCESS
+E12 read and verify source unchanged: SUCCESS
+  VERIFY: PASS - size and content unchanged
+TEST E RESULT: PASS
 
 ================================================
  ALL SD FILE PRIMITIVE TESTS PASSED
