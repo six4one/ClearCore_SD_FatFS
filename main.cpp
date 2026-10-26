@@ -6,13 +6,14 @@
  * Purpose:
  *   Hardware test harness for the ClearCore_SD_FatFS framework.
  *   Exercises SD card detection, filesystem mounting, file primitives,
- *   negative API cases, and the SD_Read() primitive.
+ *   negative API cases, SD_Read(), and SD_ReadLastLine().
  *
  * Tests:
  *   TEST A - Normal file operations
  *   TEST B - Safe negative API tests
  *   TEST C - SD card detection
  *   TEST D - SD_Read() tests
+ *   TEST E - SD_ReadLastLine() tests
  *
  * Author: Fausto Zecca
  *
@@ -39,6 +40,9 @@ namespace {
 	constexpr const char *CREATE_TEST_FILE="create_test.txt";
 	constexpr const char *EMPTY_TEST_FILE="empty_test.txt";
 	constexpr const char *READ_TEST_FILE="read_test.txt";
+	constexpr const char *LAST_LINE_TEST_FILE="last_line_test.txt";
+	constexpr const char *LARGE_LINE_TEST_FILE="large_line_test.txt";
+	constexpr const char *MISSING_LAST_LINE_FILE="missing_last_line.txt";
 
 	void Print(const char *s) {
 		while (*s) ConnectorUsb.SendChar(static_cast<uint8_t>(*s++));
@@ -71,6 +75,32 @@ namespace {
 		else { Print("  VERIFY: FAIL\r\n"); Print("  Expected: "); Print(expected); Print("\r\n  Actual: "); Print(b); Print("\r\n"); }
 		return ok;
 	}
+
+	bool VerifyLastLineCase(const char *path, const char *contents,
+	                        const char *expectedLine, const char *label) {
+		Print(label);
+		Print("\r\n");
+		FRESULT setupResult = SD_Rewrite(path, contents, (UINT)strlen(contents));
+		PrintResult("  SD_Rewrite setup", setupResult);
+		if (setupResult != FR_OK) return false;
+
+		char buffer[128];
+		UINT bytesRead = 0;
+		bool bufferTooSmall = false;
+		FRESULT readResult = SD_ReadLastLine(
+			path, buffer, sizeof(buffer), &bytesRead, &bufferTooSmall);
+		PrintResult("  SD_ReadLastLine", readResult);
+
+		UINT expectedLength = (UINT)strlen(expectedLine);
+		bool ok = (readResult == FR_OK &&
+		           !bufferTooSmall &&
+		           bytesRead == expectedLength &&
+		           (expectedLength == 0 ||
+		            memcmp(buffer, expectedLine, expectedLength) == 0));
+		Print(ok ? "  VERIFY: PASS\r\n" : "  VERIFY: FAIL\r\n");
+		return ok;
+	}
+
 	bool VerifyAbsent(const char *path) {
 		bool exists=false; FRESULT r=SD_Exists(path,&exists);
 		PrintResult("  SD_Exists",r);
@@ -365,6 +395,216 @@ int main() {
 
 	if(!readPass) Stop("TEST D FAILED\r\n");
 	Print("TEST D RESULT: PASS\r\n");
+
+
+	// ------------------------------------------------------------
+	// E: SD_ReadLastLine() tests
+	// ------------------------------------------------------------
+	Print("\r\nTEST E - SD_ReadLastLine() TESTS\r\n----------------------------------\r\n");
+	bool lastLinePass = true;
+
+	// E1: LF, CRLF, no final terminator, and single-line files.
+	if (!VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "{\"event\":1}\n{\"event\":2}\n",
+	                        "{\"event\":2}", "E1 LF with trailing newline")) lastLinePass = false;
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "{\"event\":1}\r\n{\"event\":2}\r\n",
+	                        "{\"event\":2}", "E2 CRLF with trailing newline")) lastLinePass = false;
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "first line\nfinal line",
+	                        "final line", "E3 no final terminator")) lastLinePass = false;
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "single line only",
+	                        "single line only", "E4 single-line file")) lastLinePass = false;
+
+	// E5: trailing blank lines are skipped; a separator-only file is empty.
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "first\nsecond\n\n\r\n",
+	                        "second", "E5 trailing blank lines")) lastLinePass = false;
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "\r\n\n\r",
+	                        "", "E6 only line terminators")) lastLinePass = false;
+	if (lastLinePass && !VerifyLastLineCase(LAST_LINE_TEST_FILE,
+	                        "",
+	                        "", "E7 empty file")) lastLinePass = false;
+
+	// E8: an oversized final line must not be reported as a valid truncation.
+	if (lastLinePass) {
+		char longLine[201];
+		memset(longLine, 'X', sizeof(longLine) - 1);
+		longLine[sizeof(longLine) - 1] = '\0';
+		r = SD_Rewrite(LARGE_LINE_TEST_FILE, longLine, (UINT)strlen(longLine));
+		PrintResult("E8 create oversized line", r);
+		if (r != FR_OK) {
+			lastLinePass = false;
+		} else {
+			char smallLineBuffer[32];
+			bytesRead = 0;
+			bufferTooSmall = false;
+			r = SD_ReadLastLine(LARGE_LINE_TEST_FILE, smallLineBuffer,
+			                    sizeof(smallLineBuffer), &bytesRead, &bufferTooSmall);
+			PrintResult("E8 read oversized line", r);
+			if (r != FR_INVALID_PARAMETER || !bufferTooSmall || bytesRead != 0) {
+				Print("  VERIFY: FAIL\r\n");
+				lastLinePass = false;
+			} else {
+				Print("  VERIFY: PASS - no truncated line accepted\r\n");
+			}
+		}
+	}
+
+	// E9: scan a file larger than the fixed working buffer, then read its tail.
+	if (lastLinePass) {
+		char largeChunk[64];
+		memset(largeChunk, 'L', sizeof(largeChunk));
+		r = SD_Rewrite(LARGE_LINE_TEST_FILE, 0, 0);
+		PrintResult("E9 initialize large file", r);
+		if (r != FR_OK) {
+			lastLinePass = false;
+		} else {
+			for (unsigned int i = 0; i < 128 && r == FR_OK; ++i) {
+				r = SD_Append(LARGE_LINE_TEST_FILE, largeChunk, sizeof(largeChunk));
+			}
+			PrintResult("E9 append 8192-byte line", r);
+			if (r == FR_OK) {
+				char smallLineBuffer[64];
+				bytesRead = 0;
+				bufferTooSmall = false;
+				r = SD_ReadLastLine(LARGE_LINE_TEST_FILE, smallLineBuffer,
+				                    sizeof(smallLineBuffer), &bytesRead, &bufferTooSmall);
+				PrintResult("E9 read oversized large-file line", r);
+				if (r != FR_INVALID_PARAMETER || !bufferTooSmall || bytesRead != 0) {
+					Print("  VERIFY: FAIL\r\n");
+					lastLinePass = false;
+				} else {
+					Print("  VERIFY: PASS - large line rejected with bounded buffer\r\n");
+				}
+			} else {
+				lastLinePass = false;
+			}
+
+			if (lastLinePass) {
+				const char *tail = "\r\nLARGE_TAIL\r\n";
+				r = SD_Append(LARGE_LINE_TEST_FILE, tail, (UINT)strlen(tail));
+				PrintResult("E9 append final tail record", r);
+				if (r == FR_OK) {
+					char tailBuffer[32];
+					bytesRead = 0;
+					bufferTooSmall = false;
+					r = SD_ReadLastLine(LARGE_LINE_TEST_FILE, tailBuffer,
+					                    sizeof(tailBuffer), &bytesRead, &bufferTooSmall);
+					PrintResult("E9 read large-file final record", r);
+					const char *expectedTail = "LARGE_TAIL";
+					UINT expectedTailLength = (UINT)strlen(expectedTail);
+					if (r != FR_OK || bufferTooSmall ||
+					    bytesRead != expectedTailLength ||
+					    memcmp(tailBuffer, expectedTail, expectedTailLength) != 0) {
+						Print("  VERIFY: FAIL\r\n");
+						lastLinePass = false;
+					} else {
+						Print("  VERIFY: PASS - tail read from large file\r\n");
+					}
+				} else {
+					lastLinePass = false;
+				}
+			}
+		}
+	}
+
+	// E10: missing file error is propagated.
+	if (lastLinePass) {
+		bool missingExists = false;
+		r = SD_Exists(MISSING_LAST_LINE_FILE, &missingExists);
+		if (r == FR_OK && missingExists) r = SD_Delete(MISSING_LAST_LINE_FILE);
+		if (r == FR_OK) {
+			bytesRead = 0;
+			bufferTooSmall = false;
+			r = SD_ReadLastLine(MISSING_LAST_LINE_FILE, readBuffer,
+			                    sizeof(readBuffer), &bytesRead, &bufferTooSmall);
+			PrintResult("E10 read missing file", r);
+			if (r != FR_NO_FILE || bytesRead != 0 || bufferTooSmall) {
+				Print("  VERIFY: FAIL\r\n");
+				lastLinePass = false;
+			} else {
+				Print("  VERIFY: PASS - FR_NO_FILE propagated\r\n");
+			}
+		} else {
+			PrintResult("E10 prepare missing-file test", r);
+			lastLinePass = false;
+		}
+	}
+
+	// E11: invalid arguments.
+	if (lastLinePass) {
+		bytesRead = 0;
+		bufferTooSmall = false;
+		r = SD_ReadLastLine(0, readBuffer, sizeof(readBuffer), &bytesRead, &bufferTooSmall);
+		PrintResult("E11 NULL path", r);
+		if (r != FR_INVALID_PARAMETER) lastLinePass = false;
+
+		r = SD_ReadLastLine(LAST_LINE_TEST_FILE, 0, sizeof(readBuffer),
+		                    &bytesRead, &bufferTooSmall);
+		PrintResult("E11 NULL buffer with nonzero size", r);
+		if (r != FR_INVALID_PARAMETER) lastLinePass = false;
+
+		r = SD_ReadLastLine(LAST_LINE_TEST_FILE, readBuffer, sizeof(readBuffer),
+		                    0, &bufferTooSmall);
+		PrintResult("E11 NULL bytesRead", r);
+		if (r != FR_INVALID_PARAMETER) lastLinePass = false;
+
+		r = SD_ReadLastLine(LAST_LINE_TEST_FILE, readBuffer, sizeof(readBuffer),
+		                    &bytesRead, 0);
+		PrintResult("E11 NULL bufferTooSmall", r);
+		if (r != FR_INVALID_PARAMETER) lastLinePass = false;
+		Print(lastLinePass ? "  VERIFY: PASS\r\n" : "  VERIFY: FAIL\r\n");
+	}
+
+	// E12: the read must not alter the source file.
+	if (lastLinePass) {
+		const char *readOnlyContent = "preserve this\r\nfinal record\r\n";
+		r = SD_Rewrite(LAST_LINE_TEST_FILE, readOnlyContent,
+		               (UINT)strlen(readOnlyContent));
+		PrintResult("E12 setup read-only check", r);
+		if (r != FR_OK) {
+			lastLinePass = false;
+		} else {
+			FILINFO beforeInfo, afterInfo;
+			char beforeBuffer[64], afterBuffer[64];
+			UINT beforeBytes = 0, afterBytes = 0;
+			r = f_stat(LAST_LINE_TEST_FILE, &beforeInfo);
+			if (r == FR_OK) {
+				r = SD_Read(LAST_LINE_TEST_FILE, beforeBuffer,
+				            sizeof(beforeBuffer), &beforeBytes, &bufferTooSmall);
+			}
+			if (r == FR_OK) {
+				bytesRead = 0;
+				r = SD_ReadLastLine(LAST_LINE_TEST_FILE, readBuffer,
+				                    sizeof(readBuffer), &bytesRead, &bufferTooSmall);
+			}
+			if (r == FR_OK) r = f_stat(LAST_LINE_TEST_FILE, &afterInfo);
+			if (r == FR_OK) {
+				r = SD_Read(LAST_LINE_TEST_FILE, afterBuffer,
+				            sizeof(afterBuffer), &afterBytes, &bufferTooSmall);
+			}
+			PrintResult("E12 read and verify source unchanged", r);
+			bool unchanged = (r == FR_OK &&
+			                  beforeInfo.fsize == afterInfo.fsize &&
+			                  beforeBytes == afterBytes &&
+			                  memcmp(beforeBuffer, afterBuffer, beforeBytes) == 0 &&
+			                  bytesRead == strlen("final record") &&
+			                  memcmp(readBuffer, "final record", strlen("final record")) == 0);
+			if (!unchanged) {
+				Print("  VERIFY: FAIL\r\n");
+				lastLinePass = false;
+			} else {
+				Print("  VERIFY: PASS - size and content unchanged\r\n");
+			}
+		}
+	}
+
+	if (!lastLinePass) Stop("TEST E FAILED\r\n");
+	Print("TEST E RESULT: PASS\r\n");
+
 
 	Print("\r\n================================================\r\n");
 	Print(" ALL SD FILE PRIMITIVE TESTS PASSED\r\n");
